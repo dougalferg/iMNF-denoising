@@ -45,5 +45,19 @@ print(f"\nDenoising complete.")
 print(f"Original image shape: {mock_image.shape}")
 print(f"Denoised image shape: {denoised_image.shape}")
 
+For patch-wise denoising use the 'patchwise_imnf_denoise' function.
+
+denoised_patch_imnf = patchwise_imnf_denoise(
+        image,
+        wavenumbers=mock_wavenumbers,
+        patch_size=(32, 32),
+        overlap=16,
+        bands=30,
+        noise_method='silent_region',
+        silent_region_range=(1750, 1800),
+    	silent_region_scale='non_uniform'
+    )
+
+
 License
 This project is licensed under the MIT License - see the LICENSE file for details.
