@@ -1,7 +1,3 @@
-import numpy as np
-import os
-from pathlib import Path
-
 ##### NOTE #####
 # The imnf_denoise function has the functionality to perform the 
 # original MNF implementation, we have the 'traditional_MNF' method argument.
@@ -21,6 +17,8 @@ from iMNF.mnf_invariant import imnf_denoise, patchwise_imnf_denoise
 # Import the noise adder function
 from iMNF.noise_adder import add_hyperspectral_noise
 from iMNF.helpers import load_example_data, plot_comparison, interactive_comparison
+# Import numpy
+import numpy as np
     
 #%% Now perform the denoising steps and comparisons
 if __name__ == "__main__":

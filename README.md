@@ -8,13 +8,22 @@ This repository contains the Python implementation of standard and patch-wise Sp
 
 1.  Clone the repository to your local machine:
     ```bash
-    git clone [https://github.com/YourUsername/iMNF-denoising.git](https://github.com/YourUsername/iMNF-denoising.git)
+    git clone [https://github.com/dougalferg/iMNF-denoising.git](https://github.com/dougalferg/iMNF-denoising.git)
+    ```
+
+2.  Navigate into the project directory:
+    ```bash
     cd iMNF-denoising
     ```
 
-2.  Install the required dependencies using pip:
+3.  Install the required dependencies:
     ```bash
     pip install -r requirements.txt
+    ```
+
+4.  Install the `imnf` package in editable mode:
+    ```bash
+    pip install -e .
     ```
 
 ## Quick Start
