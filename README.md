@@ -32,7 +32,7 @@ Here is a simple example of how to use the `imnf_denoise` function on a sample d
 
 ```python
 import numpy as np
-from imnf.mnf_invariant import imnf_denoise
+from imnf.mnf_invariant import imnf_denoise, patchwise_imnf_denoise
 
 # 1. Create a mock hyperspectral image (100x100 pixels, 425 bands)
 print("Creating mock hyperspectral data...")
@@ -57,7 +57,7 @@ print(f"Denoised image shape: {denoised_image.shape}")
 For patch-wise denoising use the 'patchwise_imnf_denoise' function.
 
 denoised_patch_imnf = patchwise_imnf_denoise(
-        image,
+        mock_image,
         wavenumbers=mock_wavenumbers,
         patch_size=(32, 32),
         overlap=16,
