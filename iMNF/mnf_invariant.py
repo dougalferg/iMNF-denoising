@@ -1,5 +1,146 @@
 import numpy as np
+import warnings
 from scipy.signal import savgol_filter
+
+def check_for_atypical_chemistry(hyperspectraldata, wavenumbers, 
+                                 silent_region_range=(1650, 1800), 
+                                 chunk_size_cm1=50, 
+                                 variance_threshold_multiplier=3.0):
+    """
+    Acts as an automated QC warning system to check for atypical chemistry or 
+    narrow-band contaminants (e.g., water vapor) in the user-defined silent region.
+    """
+    # 1. Reshape data
+    if hyperspectraldata.ndim == 3:
+        m, n, s = hyperspectraldata.shape
+        X = np.reshape(hyperspectraldata, (-1, s))
+    elif hyperspectraldata.ndim == 2:
+        X = hyperspectraldata
+
+    # Ensure wavenumbers are sorted
+    sort_idx = np.argsort(wavenumbers)
+    sorted_wn = wavenumbers[sort_idx]
+    sorted_X = X[:, sort_idx]
+
+    low_wn, high_wn = min(silent_region_range), max(silent_region_range)
+    region_indices = np.where((sorted_wn >= low_wn) & (sorted_wn <= high_wn))[0]
+    
+    # Sanity Check 1: Does the region exist?
+    if len(region_indices) == 0:
+        raise ValueError(f"Silent region {silent_region_range} not found in wavenumbers.")
+
+    # Sanity Check 2: Is the region large enough to chunk? 
+    # (Need at least 5 points for the SG filter, let's require at least 15 points total)
+    if len(region_indices) < 15:
+        warnings.warn("Silent region is too narrow for reliable automated contaminant checking. Proceeding without QC check.")
+        return True # Pass by default if we can't test it
+
+    chunk_variances = []
+    chunk_centers = []
+    
+    # 2. Slide the chunking window across the selected region
+    current_start = low_wn
+    step_size = chunk_size_cm1 / 2 # 50% overlap for sliding window
+    
+    while current_start + chunk_size_cm1 <= high_wn:
+        current_end = current_start + chunk_size_cm1
+        chunk_idx = np.where((sorted_wn >= current_start) & (sorted_wn <= current_end))[0]
+        
+        # Sanity Check 3: Does this specific chunk have enough points for SG filter?
+        if len(chunk_idx) >= 7: 
+            chunk_slice = slice(chunk_idx.min(), chunk_idx.max() + 1)
+            noise_region = sorted_X[:, chunk_slice]
+            
+            # Apply SG derivative
+            noise_deriv = savgol_filter(noise_region, window_length=5, polyorder=2, deriv=1, axis=1)
+            base_noise_var = np.mean(np.var(noise_deriv, axis=0))
+            
+            chunk_variances.append(base_noise_var)
+            chunk_centers.append(current_start + (chunk_size_cm1 / 2))
+            
+        current_start += step_size
+
+    if not chunk_variances:
+        return True # Failsafe
+
+    # 3. Evaluate Stability
+    median_variance = np.median(chunk_variances)
+    max_variance = np.max(chunk_variances)
+    max_idx = np.argmax(chunk_variances)
+    
+    # If the max variance exceeds our multiplier threshold compared to the median
+    if max_variance > (median_variance * variance_threshold_multiplier):
+        problem_center = chunk_centers[max_idx]
+        warning_msg = (
+            f"\n--- iMNF QC WARNING ---\n"
+            f"Atypical chemistry or structured interference detected in the silent region!\n"
+            f"Variance spiked at ~{problem_center:.1f} cm⁻¹. Max variance is {max_variance/median_variance:.1f}x higher than the regional median.\n"
+            f"Recommendation: Visual inspection of this region is strongly advised. Consider shifting your silent_region_range to avoid this contaminant."
+        )
+        warnings.warn(warning_msg)
+        return False
+        
+    return True
+
+def find_optimal_silent_region(hyperspectraldata, wavenumbers, 
+                               search_range=(1750, 2200), 
+                               window_size=10, 
+                               step_size=5):
+    """
+    Dynamically finds the optimal biochemically silent region by sliding a window.
+    Includes robust boundary checks to prevent out-of-bounds errors.
+    """
+    if hyperspectraldata.ndim == 3:
+        m, n, s = hyperspectraldata.shape
+        X = np.reshape(hyperspectraldata, (-1, s))
+    elif hyperspectraldata.ndim == 2:
+        X = hyperspectraldata
+    else:
+        raise ValueError("Input data must be 2D or 3D.")
+
+    # 1. Boundary Intersection Check
+    actual_min_wn, actual_max_wn = np.min(wavenumbers), np.max(wavenumbers)
+    low_wn = max(min(search_range), actual_min_wn)
+    high_wn = min(max(search_range), actual_max_wn)
+    
+    if (high_wn - low_wn) < window_size:
+        raise ValueError(
+            f"Cannot run heuristic. The available overlapping wavenumber range "
+            f"({low_wn:.1f} - {high_wn:.1f} cm⁻¹) is smaller than the requested "
+            f"window size ({window_size} cm⁻¹)."
+        )
+
+    # Ensure wavenumbers are sorted for slicing
+    sort_idx = np.argsort(wavenumbers)
+    sorted_wn = wavenumbers[sort_idx]
+    sorted_X = X[:, sort_idx]
+
+    results = []
+    
+    # 2. Slide the window across the valid search range
+    current_start = low_wn
+    while current_start + window_size <= high_wn:
+        current_end = current_start + window_size
+        
+        indices = np.where((sorted_wn >= current_start) & (sorted_wn <= current_end))[0]
+        
+        if len(indices) >= 7: # Ensure window is large enough for SG filter safely
+            window_slice = slice(indices.min(), indices.max() + 1)
+            noise_region = sorted_X[:, window_slice]
+            
+            noise_deriv = savgol_filter(noise_region, window_length=5, polyorder=2, deriv=1, axis=1)
+            base_noise_var = np.mean(np.var(noise_deriv, axis=0))
+            
+            center_wn = current_start + (window_size / 2)
+            results.append((center_wn, current_start, current_end, base_noise_var))
+            
+        current_start += step_size
+
+    if not results:
+        raise ValueError("No valid spectral windows could be formed. Check data spacing and window_size.")
+
+    return results
+
 
 def imnf_denoise(hyperspectraldata, wavenumbers=None, bands=30,
                  noise_method='silent_region', silent_region_range=(1750, 1800),

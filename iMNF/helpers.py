@@ -3,6 +3,7 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
+from mnf_invariant import find_optimal_silent_region
 
 # Example data loader
 def load_example_data():
@@ -169,3 +170,54 @@ def interactive_comparison(display_image, datasets, wavenumbers):
     fig.canvas.mpl_connect('button_press_event', onclick)
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.show()
+    
+def plot_silent_region_variance(hyperspectraldata, wavenumbers, search_range=(1750, 2200), window_size=10):
+    """
+    Runs the automated heuristic search to identify the optimal biochemically silent region,
+    then visualizes the base noise variance across the search range to confirm the selection.
+    
+    Parameters
+    ----------
+    hyperspectraldata : numpy.ndarray
+        The input hyperspectral data (2D or 3D).
+    wavenumbers : numpy.ndarray
+        A 1D numpy array of wavenumber values.
+    search_range : tuple, optional
+        The (start, end) wavenumbers to search within. Default is (1750, 2200).
+    window_size : int, optional
+        The width of the sliding window in cm⁻¹. Default is 10.
+        
+    Returns
+    -------
+    opt_start, opt_end : float
+        The start and end wavenumbers of the optimally selected silent region.
+    """
+    # Run the heuristic search
+    results = find_optimal_silent_region(hyperspectraldata, wavenumbers, 
+                                         search_range=search_range, 
+                                         window_size=window_size, 
+                                         step_size=5)
+    
+    centers = [res[0] for res in results]
+    variances = [res[3] for res in results]
+    
+    optimal_idx = np.argmin(variances)
+    opt_center, opt_start, opt_end, opt_var = results[optimal_idx]
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(centers, variances, marker='o', linestyle='-', color='b', label='Base Noise Variance')
+    
+    plt.axvspan(opt_start, opt_end, color='red', alpha=0.2, label=f'Optimal Window ({opt_start:.1f}-{opt_end:.1f} cm⁻¹)')
+    plt.scatter(opt_center, opt_var, color='red', s=100, zorder=5)
+    
+    plt.title(f'Automated Silent Region Selection (Window Size: {window_size} cm⁻¹)')
+    plt.xlabel('Center Wavenumber of Window (cm⁻¹)')
+    plt.ylabel('Base Noise Variance (a.u.)')
+    plt.gca().invert_xaxis()
+    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+    
+    print(f"The automated heuristic selected the window: {opt_start:.1f} to {opt_end:.1f} cm⁻¹")
+    return opt_start, opt_end
